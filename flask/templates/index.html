@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face-Detection-MaskRCNN</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 16px; /* Adjust this to change the default font size */
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1, h2 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        form {
+            margin-bottom: 20px;
+        }
+
+        input[type="file"],
+        input[type="submit"] {
+            margin-top: 10px;
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto 20px auto;
+            border: 1px solid #747474;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            margin-bottom: 5px;
+            color: red; /* Example style for error messages */
+        }
+    </style>
+</head>
+<body>
+    <h1>Face Detection using Mask R-CNN</h1>
+    <form method="post" enctype="multipart/form-data">
+        <input type="file" name="file">
+        <input type="submit" value="Upload">
+    </form>
+    
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul>
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    
+    {% if face_detect %}
+        <h2>Original Image</h2>
+        <img src="{{ url_for('static', filename='detection/' + face_detect['location'].split('/')[-1]) }}" alt="Original Image">
+        
+        <h2>Detected Image</h2>
+        <img src="{{ url_for('static', filename='detection/' + face_detect['result_image'].split('/')[-1]) }}" alt="Detected Image">
+    {% endif %}
+</body>
+</html>
