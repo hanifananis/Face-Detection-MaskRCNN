@@ -1,0 +1,125 @@
+from flask import Flask, render_template, request, flash
+from PIL import Image
+import numpy as np
+import os
+import face_detection
+from mrcnn import model as modellib
+from mrcnn import visualize
+import matplotlib.pyplot as plt
+
+app = Flask(__name__)
+app.secret_key = 'supersecretkey'  # Required for flashing messages
+
+host = "127.0.0.1"
+port = 5000
+
+class InferenceConfig(face_detection.DatasetConfig):
+    GPU_COUNT = 1
+    IMAGES_PER_GPU = 1
+
+config = InferenceConfig()
+
+def load_inference_model(weights_path):
+    # Create model in inference mode
+    model = modellib.MaskRCNN(mode="inference", config=config, model_dir=os.getcwd())
+    # Load weights
+    model.load_weights(weights_path, by_name=True)
+    return model
+
+def predict(image, model):
+    # Convert image to the format the model expects
+    image_np = np.array(image)
+
+    # Run detection
+    results = model.detect([image_np], verbose=1)
+    r = results[0]
+
+    # Refine bounding boxes
+    def refine_bounding_boxes(rois, scores, threshold=0.7):
+        refined_boxes = []
+        for roi, score in zip(rois, scores):
+            if score >= threshold:
+                refined_boxes.append(roi)
+        return np.array(refined_boxes)
+
+    r['rois'] = refine_bounding_boxes(r['rois'], r['scores'], threshold=config.DETECTION_MIN_CONFIDENCE)
+    return r, image_np
+
+def save_image_with_boxes(image, boxes, masks, class_ids, class_names, scores, save_path):
+    # Create a figure and axis
+    fig, ax = plt.subplots(1, figsize=(12, 12))
+
+    # Display the image
+    ax.imshow(image)
+
+    # Visualize each detected object
+    visualize.display_instances(image, boxes, masks, class_ids, class_names, scores, ax=ax)
+
+    # Save the figure
+    fig.savefig(save_path, bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
+
+def resize_image(image, size=(800, 800)):
+    # Resize the image while maintaining aspect ratio
+    image.thumbnail(size, Image.LANCZOS)
+    # Create a new background image
+    background = Image.new('RGB', size, (255, 255, 255))
+    # Paste the resized image onto the background
+    background.paste(
+        image, (int((size[0] - image.size[0]) / 2), int((size[1] - image.size[1]) / 2))
+    )
+    return background
+
+@app.route("/", methods=['GET', 'POST'])
+def detect(face_detect=None):
+    if request.method == 'GET':
+        return render_template('index.html', face_detect=None)
+
+    if request.method == 'POST':
+        # Ambil file gambar dari form
+        file = request.files['file']
+
+        # Check for unsupported file formats
+        try:
+            img = Image.open(file.stream).convert("RGB")
+        except ValueError as e:
+            flash(f"Unsupported file format: {e}")
+            return render_template('index.html', face_detect=None)
+
+        # Resize image to a consistent size
+        img = resize_image(img)
+
+        # Simpan gambar di folder uploads (jika perlu)
+        save_path = os.path.join('static', 'detection', file.filename).replace("\\", "/")
+        img.save(save_path)
+
+        # Load the model
+        model_path = './templates/mask_rcnn_face_new.h5'
+        model = load_inference_model(model_path)
+
+        # Predict face detection
+        hasil, image_np = predict(img, model)
+
+        # Save the image with detected bounding boxes
+        result_image_path = os.path.join('static', 'detection', 'result_' + file.filename).replace("\\", "/")
+        save_image_with_boxes(
+            image_np,
+            hasil['rois'],
+            hasil['masks'],
+            hasil['class_ids'],
+            ['BG', 'face'],
+            hasil['scores'],
+            result_image_path
+        )
+
+        res = {
+            "location": save_path,
+            "result_image": result_image_path,
+            "hasil": hasil
+        }
+        print(res)
+
+        return render_template('index.html', face_detect=res)
+
+if __name__ == '__main__':
+    app.run(host=host, port=port)
